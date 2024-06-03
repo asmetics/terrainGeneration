@@ -19,7 +19,7 @@ local folder = Instance.new("Folder")
 folder.Parent = game.Workspace
 folder.Name = "Nodes"
 
-function spiral(X, Y)
+function spiral(X, Y) -- unused currently, may be used later.
 	local x, y = 0, 0
 	local dx, dy = 0, -1
 	local positions = {}
