@@ -1,6 +1,5 @@
-local totalNodes = 10000
 local startPosition = Vector3.new(0, 0, 0)
-local nodeDistance = 10
+local nodeDistance = 5
 local positions
 RenderSize = 100
 Resolution = 100
@@ -50,7 +49,7 @@ end
 
 function new()
 	local currentNodes = 0
-	local _max = 100
+	local _max = 50
 	local max = _max
 	for x = 0, RenderSize do
 		for z = 0, RenderSize do
@@ -58,14 +57,14 @@ function new()
 			
 			if max - 1 == 0 then
 				game["Run Service"].Heartbeat:Wait()
-				max = max - 1
-			else
 				max = _max
+			else
+				max = max - 1
 			end
 			
 			cell.Anchored = true
 			cell.Parent = folder
-			cell.Size = Vector3.new(10, 50, 10)
+			cell.Size = Vector3.new(5, 50, 5)
 			cell.Color = Color3.fromRGB(62, 106, 35)
 			cell.Material = Enum.Material.Grass
 
