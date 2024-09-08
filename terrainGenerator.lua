@@ -1,16 +1,24 @@
-local startPosition = Vector3.new(0, 0, 0)
+local startPosition = Vector3.new(0, 20, 0)
 local nodeDistance = 5
 local positions
-RenderSize = 100
-Resolution = 100
-local Frequency = nil
-local Amplitude = nil
-local Resoloution = nil
+local RenderSize = 350
+local Frequency, Amplitude, Resolution, heightBias
+
+local placingTable = {}
+local placePer = 750
+
+local seed = tick()
+math.randomseed(seed)
+
+local waterHeight = nil
 
 function newValues()
-	Frequency = math.random(5, 10)
-	Amplitude = math.random(3, 6)
-	Resoloution = math.random(60, 120)
+	Frequency = math.random(5,7)
+	Amplitude = 40
+	Resolution = math.random(200,400)
+	heightBias = 400
+	seed = tick() + math.random(-92873987, 92873987)
+	math.randomseed(seed)
 end
 
 newValues()
@@ -19,61 +27,101 @@ local folder = Instance.new("Folder")
 folder.Parent = game.Workspace
 folder.Name = "Nodes"
 
-function spiral(X, Y) -- unused currently, may be used later.
-	local x, y = 0, 0
-	local dx, dy = 0, -1
-	local positions = {}
+local function FBMNoise(x: number, z: number, octaves: number): number
+	local total = 0
+	local frequency = Frequency
+	local amplitude = Amplitude
+	local maxValue = 0
 
-	for i = 1, (math.max(X, Y))^2 do
-		if (-X/2 < x and x <= X/2) and (-Y/2 < y and y <= Y/2) then
-			table.insert(positions, Vector3.new(x * nodeDistance, startPosition.Y + math.random(-2, 2), y * nodeDistance))
-		end
-		if x == y or (x < 0 and x == -y) or (x > 0 and x == 1 - y) then
-			dx, dy = -dy, dx
-		end
-		x, y = x + dx, y + dy
+	for i = 1, octaves do
+		total = total + math.noise(x * frequency, z * frequency, seed) * amplitude
+		maxValue = maxValue + amplitude
+		frequency = frequency * 2
+		amplitude = amplitude * 0.5
 	end
 
-	return positions
+	return total / maxValue
 end
 
-local function GetHeight(x :number, z :number): number -- Creates Our Function
-	local noiseHeight = math.noise( -- Math.Noise
-		x / Resoloution * Frequency, -- The First Value Is X Divided And Multiplied
-		z / Resoloution * Frequency -- The Second is Z but the same as X
-	)
-	noiseHeight = math.clamp(noiseHeight, -.5, .5) + .5
-	return noiseHeight -- Returns The 'Noise' Height / Value
+local globalHeightOffset = math.random(-40, 40)
+
+local function GetHeight(x: number, z: number): number
+	local noiseValue = FBMNoise(x / Resolution, z / Resolution, 5)
+	local height = noiseValue * Amplitude
+	local regionalBias = math.noise(x / 1000, z / 1000, seed) * heightBias
+	height = height + regionalBias + globalHeightOffset
+	return height
 end
 
+local function SmoothHeight(x: number, z: number): number
+	local h1 = GetHeight(x, z)
+	local h2 = GetHeight(x + 1, z)
+	local h3 = GetHeight(x - 1, z)
+	local h4 = GetHeight(x, z + 1)
+	local h5 = GetHeight(x, z - 1)
+	return (h1 + h2 + h3 + h4 + h5) / 5
+end
+
+local function GetMaterial(block, height: number)
+	if height < -50 then
+		block.Material = Enum.Material.Plastic
+		block.Transparency = 0.5
+		block.CanCollide = false
+		block.Color = Color3.fromRGB(49, 176, 255)
+		return nil
+	elseif height < 50 then
+		return Enum.Material.Grass, Color3.fromRGB(math.random(67, 72), math.random(104, 110), math.random(46, 49))
+	elseif height < 60 then
+		return Enum.Material.Rock, Color3.fromRGB(math.random(124, 130), math.random(109, 117), math.random(100, 115))
+	else
+		return Enum.Material.Snow, Color3.fromRGB(math.random(250, 255), math.random(245, 250), math.random(245, 250))
+	end
+end
 
 function new()
 	local currentNodes = 0
-	local _max = 50
-	local max = _max
+
 	for x = 0, RenderSize do
 		for z = 0, RenderSize do
+			local height = SmoothHeight(x, z)
 			local cell = Instance.new("Part")
-			
-			if max - 1 == 0 then
-				game["Run Service"].Heartbeat:Wait()
-				max = _max
-			else
-				max = max - 1
-			end
-			
-			cell.Anchored = true
-			cell.Parent = folder
-			cell.Size = Vector3.new(5, 50, 5)
-			cell.Color = Color3.fromRGB(62, 106, 35)
-			cell.Material = Enum.Material.Grass
 
-			local newPosition = Vector3.new(startPosition.X + math.floor(x * cell.Size.X), startPosition.Y + math.floor(GetHeight(x, z) * Amplitude) * Amplitude, startPosition.Z + math.floor(z * cell.Size.X))
-			cell.Position = newPosition
+			cell.Size = Vector3.new(5, 15, 5)
+			cell.Anchored = true
+
+			local material, color = GetMaterial(cell, height)
+			if material and color then
+				cell.Color = color
+				cell.Material = material
+			end
+
+			local newPosition = Vector3.new(
+				startPosition.X + math.floor(x * cell.Size.X),
+				startPosition.Y + height + math.random(0, 5) / 10,
+				startPosition.Z + math.floor(z * cell.Size.X)
+			)
+
+			if material and color then
+				cell.Position = newPosition
+			else
+				if waterHeight == nil then
+					waterHeight = newPosition.Y
+				end
+				cell.Position = Vector3.new(newPosition.X, waterHeight, newPosition.Z)
+			end
+
+			table.insert(placingTable, cell)
+
+			if #placingTable >= placePer then
+				for i, v in pairs(placingTable) do
+					v.Parent = folder
+				end
+				placingTable = {}
+				game["Run Service"].Heartbeat:Wait()
+			end
 		end
 	end
 end
-
 
 game.ReplicatedStorage:WaitForChild("new").OnServerEvent:Connect(function()
 	if game.Workspace:FindFirstChild("Nodes") then
@@ -81,6 +129,6 @@ game.ReplicatedStorage:WaitForChild("new").OnServerEvent:Connect(function()
 			v:Destroy()
 		end
 	end
-	new()
 	newValues()
+	new()
 end)
